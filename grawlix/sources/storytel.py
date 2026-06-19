@@ -49,9 +49,16 @@ class Storytel(Source):
         )
         details = response.json()
 
+        authors = [
+            author["name"]
+            for author in details.get("authors", [])
+            if isinstance(author, dict) and author.get("name")
+        ]
+
         return Book(
             metadata = Metadata(
-                title = details["title"]
+                title = details["title"],
+                authors = authors
             ),
             data = SingleFile(
                 OnlineFile(
