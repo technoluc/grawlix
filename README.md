@@ -32,7 +32,8 @@ pip install grawlix
 ```shell
 git clone https://github.com/jo1gi/grawlix.git
 cd grawlix
-python3 setup.py install
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e .
 ```
 
 ## Authentication
