@@ -107,7 +107,7 @@ async def main() -> None:
             result = await source.download(url)
             if isinstance(result, Book):
                 with logging.progress(result.metadata.title, source.name) as progress:
-                    template: str = args.output or "{title}.{ext}"
+                    template: str = args.output or "{authors} - {title}.{ext}"
                     await download_with_progress(result, progress, template)
             elif isinstance(result, Series):
                 await download_series(source, result, args)
