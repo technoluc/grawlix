@@ -40,6 +40,21 @@ def _set_dc_values(metadata: ET.Element, name: str, values: list[str]) -> None:
         metadata.insert(insertion_index + offset, element)
 
 
+def _set_dc_identifier(metadata: ET.Element, value: str) -> None:
+    """Update the package identifier without dropping its referenced id attribute."""
+    existing = [
+        element for element in metadata if element.tag == f"{{{DC_NS}}}identifier"
+    ]
+    if existing:
+        existing[0].text = value
+        for element in existing[1:]:
+            metadata.remove(element)
+        return
+    element = ET.Element(f"{{{DC_NS}}}identifier")
+    element.text = value
+    metadata.append(element)
+
+
 def _set_named_meta(metadata: ET.Element, name: str, content: str) -> None:
     element = next(
         (
@@ -165,6 +180,14 @@ def normalize_epub_metadata(file_path: str | Path, book_metadata: Metadata) -> N
             _set_series(opf_root, metadata, book_metadata.series, book_metadata.index)
         if book_metadata.description:
             _set_dc_values(metadata, "description", [book_metadata.description])
+        if book_metadata.language:
+            _set_dc_values(metadata, "language", [book_metadata.language])
+        if book_metadata.publisher:
+            _set_dc_values(metadata, "publisher", [book_metadata.publisher])
+        if book_metadata.identifier:
+            _set_dc_identifier(metadata, book_metadata.identifier)
+        if book_metadata.release_date:
+            _set_dc_values(metadata, "date", [book_metadata.release_date.isoformat()])
 
         ET.register_namespace("dc", DC_NS)
         updated_opf = ET.tostring(opf_root, encoding="utf-8", xml_declaration=True)

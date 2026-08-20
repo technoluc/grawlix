@@ -3,6 +3,7 @@ from grawlix.encryption import AESEncryption
 from grawlix.exceptions import InvalidUrl
 from .source import Source
 
+from datetime import date
 from typing import Optional
 import uuid
 import rich
@@ -79,12 +80,18 @@ class Nextory(Source):
 
 
     @staticmethod
-    def _find_epub_id(product_data) -> str:
-        """Find id of book format of type epub for given book"""
+    def _find_epub_format(product_data: dict) -> dict:
+        """Find the EPUB format metadata for a product."""
         for format in product_data["formats"]:
             if format["type"] == "epub":
-                return format["identifier"]
+                return format
         raise InvalidUrl
+
+
+    @classmethod
+    def _find_epub_id(cls, product_data: dict) -> str:
+        """Find id of book format of type epub for given book"""
+        return cls._find_epub_format(product_data)["identifier"]
 
 
     @staticmethod
@@ -147,6 +154,16 @@ class Nextory(Source):
 
     @staticmethod
     def _extract_series_index(product_info: dict) -> int | float | str | None:
+        # Nextory exposes the actual position in the series as a top-level
+        # volume. The value inside the series object is an internal grouping.
+        raw_volume = product_info.get("volume")
+        if raw_volume is not None:
+            try:
+                volume = int(raw_volume)
+                if volume > 0:
+                    return volume
+            except (TypeError, ValueError):
+                pass
         series = product_info.get("series")
         if isinstance(series, dict):
             for key in ("position", "orderInSeries", "order", "number", "sequence", "index"):
@@ -160,7 +177,11 @@ class Nextory(Source):
 
     @staticmethod
     def _extract_description(product_info: dict) -> Optional[str]:
-        description = product_info.get("description") or product_info.get("summary")
+        description = (
+            product_info.get("description_full")
+            or product_info.get("description")
+            or product_info.get("summary")
+        )
         if isinstance(description, str):
             return description
         if isinstance(description, dict):
@@ -168,6 +189,27 @@ class Nextory(Source):
                 if isinstance(description.get(key), str):
                     return description[key]
         return None
+
+
+    @staticmethod
+    def _extract_publisher(format_info: dict) -> Optional[str]:
+        publisher = format_info.get("publisher")
+        if isinstance(publisher, str):
+            return publisher
+        if isinstance(publisher, dict) and isinstance(publisher.get("name"), str):
+            return publisher["name"]
+        return None
+
+
+    @staticmethod
+    def _extract_release_date(format_info: dict) -> Optional[date]:
+        publication_date = format_info.get("publication_date")
+        if not isinstance(publication_date, str):
+            return None
+        try:
+            return date.fromisoformat(publication_date.split("T", 1)[0])
+        except ValueError:
+            return None
 
 
     async def _get_book_id_from_url_id(self, url_id: str) -> str:
@@ -191,7 +233,9 @@ class Nextory(Source):
             f"https://api.nextory.com/library/v1/products/{book_id}"
         )
         product_data = product_data.json()
-        epub_id = self._find_epub_id(product_data)
+        epub_format = self._find_epub_format(product_data)
+        epub_id = epub_format["identifier"]
+        isbn = epub_format.get("isbn") or product_data.get("isbn")
         pages = await self._get_pages(epub_id)
         authors = [
             author["name"]
@@ -206,6 +250,16 @@ class Nextory(Source):
                 series = self._extract_series_name(product_data),
                 index = self._extract_series_index(product_data),
                 description = self._extract_description(product_data),
+                language = product_data.get("language"),
+                publisher = (
+                    self._extract_publisher(epub_format)
+                    or self._extract_publisher(product_data)
+                ),
+                identifier = str(isbn) if isbn else None,
+                release_date = (
+                    self._extract_release_date(epub_format)
+                    or self._extract_release_date(product_data)
+                ),
             )
         )
 
