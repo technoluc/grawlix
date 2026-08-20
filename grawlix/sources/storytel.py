@@ -54,11 +54,22 @@ class Storytel(Source):
             for author in details.get("authors", [])
             if isinstance(author, dict) and author.get("name")
         ]
+        series_info = details.get("seriesInfo") or {}
+        series = series_info.get("name") if isinstance(series_info, dict) else None
+        series_index = (
+            series_info.get("orderInSeries") if isinstance(series_info, dict) else None
+        )
+        description = details.get("description")
+        if not isinstance(description, str):
+            description = None
 
         return Book(
             metadata = Metadata(
                 title = details["title"],
-                authors = authors
+                authors = authors,
+                series = series,
+                index = series_index,
+                description = description,
             ),
             data = SingleFile(
                 OnlineFile(
