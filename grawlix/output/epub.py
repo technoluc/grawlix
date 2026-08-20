@@ -1,6 +1,7 @@
 from grawlix.book import HtmlFiles, HtmlFile, OnlineFile, Book, SingleFile, Metadata, EpubInParts
 from grawlix.exceptions import UnsupportedOutputFormat
 from .output_format import OutputFormat, Update
+from .epub_metadata import normalize_epub_metadata
 
 import asyncio
 from bs4 import BeautifulSoup
@@ -23,6 +24,7 @@ class Epub(OutputFormat):
             await self._download_epub_in_parts(book.data, book.metadata, location, update)
         else:
             raise UnsupportedOutputFormat
+        normalize_epub_metadata(location, book.metadata)
 
 
     async def _download_html_files(self, html: HtmlFiles, metadata: Metadata, location: str, update: Update) -> None:
@@ -135,4 +137,3 @@ class Epub(OutputFormat):
         output.add_item(epub.EpubNcx())
         output.add_item(epub.EpubNav())
         epub.write_epub(location, output)
-        exit()

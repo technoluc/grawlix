@@ -140,9 +140,34 @@ class Nextory(Source):
     @staticmethod
     def _extract_series_name(product_info: dict) -> Optional[str]:
         series = product_info.get("series")
-        if not series:
+        if not isinstance(series, dict):
             return None
-        return series["name"]
+        return series.get("name")
+
+
+    @staticmethod
+    def _extract_series_index(product_info: dict) -> int | float | str | None:
+        series = product_info.get("series")
+        if isinstance(series, dict):
+            for key in ("position", "orderInSeries", "order", "number", "sequence", "index"):
+                if series.get(key) is not None:
+                    return series[key]
+        for key in ("seriesPosition", "orderInSeries", "series_order", "series_index"):
+            if product_info.get(key) is not None:
+                return product_info[key]
+        return None
+
+
+    @staticmethod
+    def _extract_description(product_info: dict) -> Optional[str]:
+        description = product_info.get("description") or product_info.get("summary")
+        if isinstance(description, str):
+            return description
+        if isinstance(description, dict):
+            for key in ("text", "value", "content", "html"):
+                if isinstance(description.get(key), str):
+                    return description[key]
+        return None
 
 
     async def _get_book_id_from_url_id(self, url_id: str) -> str:
@@ -168,12 +193,19 @@ class Nextory(Source):
         product_data = product_data.json()
         epub_id = self._find_epub_id(product_data)
         pages = await self._get_pages(epub_id)
+        authors = [
+            author["name"]
+            for author in product_data.get("authors", [])
+            if isinstance(author, dict) and author.get("name")
+        ]
         return Book(
             data = pages,
             metadata = Metadata(
                 title = product_data["title"],
-                authors = [author["name"] for author in product_data["authors"]],
+                authors = authors,
                 series = self._extract_series_name(product_data),
+                index = self._extract_series_index(product_data),
+                description = self._extract_description(product_data),
             )
         )
 
