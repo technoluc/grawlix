@@ -21,11 +21,14 @@ class FakeResponse:
                 "publisher": {"name": "Boekerij"},
                 "isbn": "9789022599829",
                 "publication_date": "2023-06-15",
+                "img_url": "https://example.invalid/cover.jpg",
             }],
         }
 
 
 class FakeClient:
+    headers = {"X-Profile-Token": "test-token"}
+
     async def get(self, url):
         return FakeResponse()
 
@@ -47,6 +50,9 @@ class NextoryMetadataTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(book.metadata.publisher, "Boekerij")
         self.assertEqual(book.metadata.identifier, "9789022599829")
         self.assertEqual(book.metadata.release_date, date(2023, 6, 15))
+        self.assertEqual(book.data.cover.url, "https://example.invalid/cover.jpg")
+        self.assertEqual(book.data.cover.extension, "jpg")
+        self.assertEqual(book.data.cover.headers, FakeClient.headers)
         source._get_pages.assert_awaited_once_with("epub-123")
 
     def test_series_index_accepts_product_level_fallback(self):

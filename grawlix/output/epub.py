@@ -5,8 +5,10 @@ from .epub_metadata import normalize_epub_metadata
 
 import asyncio
 from bs4 import BeautifulSoup
+from io import BytesIO
 import os
 from ebooklib import epub
+from PIL import Image
 from zipfile import ZipFile
 import rich
 
@@ -86,7 +88,7 @@ class Epub(OutputFormat):
 
     async def _download_epub_in_parts(self, data: EpubInParts, metadata: Metadata, location: str, update: Update) -> None:
         files = data.files
-        file_count = len(files)
+        file_count = len(files) + (1 if data.cover else 0)
         progress = 1/(file_count)
         temporary_file_location = f"{location}.tmp"
 
@@ -133,6 +135,15 @@ class Epub(OutputFormat):
             if update:
                 update(progress)
         os.remove(temporary_file_location)
+
+        if data.cover:
+            cover_content = await self._download_file(data.cover)
+            with Image.open(BytesIO(cover_content)) as image:
+                converted = BytesIO()
+                image.convert("RGB").save(converted, format="JPEG", quality=95)
+            output.set_cover("cover.jpg", converted.getvalue())
+            if update:
+                update(progress)
 
         output.add_item(epub.EpubNcx())
         output.add_item(epub.EpubNav())

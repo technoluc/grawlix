@@ -237,6 +237,13 @@ class Nextory(Source):
         epub_id = epub_format["identifier"]
         isbn = epub_format.get("isbn") or product_data.get("isbn")
         pages = await self._get_pages(epub_id)
+        cover_url = epub_format.get("img_url") or product_data.get("img_url")
+        if cover_url:
+            pages.cover = OnlineFile(
+                url = cover_url,
+                extension = "jpg",
+                headers = self._client.headers,
+            )
         authors = [
             author["name"]
             for author in product_data.get("authors", [])
