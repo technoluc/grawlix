@@ -1,6 +1,7 @@
 from io import BytesIO
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from xml.etree import ElementTree as ET
@@ -48,6 +49,7 @@ class EpubMetadataTests(unittest.TestCase):
                     """
                     <dc:title>The Witcher</dc:title>
                     <dc:creator>Wrong author</dc:creator>
+                    <dc:identifier id="book-id">old-identifier</dc:identifier>
                     <meta name="calibre:series" content="The Witcher"/>
                     """
                 )
@@ -61,6 +63,10 @@ class EpubMetadataTests(unittest.TestCase):
                     series="The Witcher",
                     index=6,
                     description="Het zesde boek in de Witcher-serie.",
+                    language="nl",
+                    publisher="Boekerij",
+                    identifier="9789022599829",
+                    release_date=date(2023, 6, 15),
                 ),
             )
 
@@ -84,6 +90,12 @@ class EpubMetadataTests(unittest.TestCase):
                 metadata.find(f"{{{DC_NS}}}description").text,
                 "Het zesde boek in de Witcher-serie.",
             )
+            self.assertEqual(metadata.find(f"{{{DC_NS}}}language").text, "nl")
+            self.assertEqual(metadata.find(f"{{{DC_NS}}}publisher").text, "Boekerij")
+            identifier = metadata.find(f"{{{DC_NS}}}identifier")
+            self.assertEqual(identifier.text, "9789022599829")
+            self.assertEqual(identifier.get("id"), "book-id")
+            self.assertEqual(metadata.find(f"{{{DC_NS}}}date").text, "2023-06-15")
             collection = next(
                 element
                 for element in metadata

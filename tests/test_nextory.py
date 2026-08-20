@@ -1,4 +1,5 @@
 import unittest
+from datetime import date
 from unittest.mock import AsyncMock
 
 from grawlix.book import EpubInParts
@@ -10,9 +11,17 @@ class FakeResponse:
         return {
             "title": "De Zwaluwentoren",
             "authors": [{"name": "Andrzej Sapkowski"}],
-            "series": {"name": "The Witcher", "position": 6},
-            "description": "Het zesde boek in de Witcher-serie.",
-            "formats": [{"type": "epub", "identifier": "epub-123"}],
+            "series": {"name": "The Witcher", "vol": 0},
+            "volume": 6,
+            "description_full": "Het zesde boek in de Witcher-serie.",
+            "language": "nl",
+            "formats": [{
+                "type": "epub",
+                "identifier": "epub-123",
+                "publisher": {"name": "Boekerij"},
+                "isbn": "9789022599829",
+                "publication_date": "2023-06-15",
+            }],
         }
 
 
@@ -34,10 +43,20 @@ class NextoryMetadataTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(book.metadata.series, "The Witcher")
         self.assertEqual(book.metadata.index, 6)
         self.assertEqual(book.metadata.description, "Het zesde boek in de Witcher-serie.")
+        self.assertEqual(book.metadata.language, "nl")
+        self.assertEqual(book.metadata.publisher, "Boekerij")
+        self.assertEqual(book.metadata.identifier, "9789022599829")
+        self.assertEqual(book.metadata.release_date, date(2023, 6, 15))
         source._get_pages.assert_awaited_once_with("epub-123")
 
     def test_series_index_accepts_product_level_fallback(self):
         self.assertEqual(Nextory._extract_series_index({"seriesPosition": "6.5"}), "6.5")
+
+    def test_series_index_prefers_nextory_volume(self):
+        self.assertEqual(
+            Nextory._extract_series_index({"volume": 4, "series": {"position": 99}}),
+            4,
+        )
 
     def test_description_accepts_nested_api_value(self):
         self.assertEqual(
