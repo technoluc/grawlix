@@ -71,6 +71,7 @@ class EpubInParts:
     """
     files: list[OnlineFile]
     files_in_toc: dict[str, str]
+    cover: Optional[OnlineFile] = None
 
 
 @dataclass(slots=True)

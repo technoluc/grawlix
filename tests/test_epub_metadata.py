@@ -2,12 +2,21 @@ from io import BytesIO
 import tempfile
 import unittest
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from PIL import Image
 from unittest.mock import AsyncMock, patch
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
-from grawlix.book import Book, EpubInParts, HtmlFiles, Metadata, OfflineFile, SingleFile
+from grawlix.book import (
+    Book,
+    EpubInParts,
+    HtmlFiles,
+    Metadata,
+    OfflineFile,
+    OnlineFile,
+    SingleFile,
+)
 from grawlix.output.epub import Epub
 from grawlix.output.epub_metadata import DC_NS, normalize_epub_metadata
 
@@ -30,7 +39,11 @@ def create_epub(metadata: str) -> bytes:
         archive.writestr("mimetype", "application/epub+zip", compress_type=ZIP_STORED)
         archive.writestr("META-INF/container.xml", CONTAINER, compress_type=ZIP_DEFLATED)
         archive.writestr("OEBPS/content.opf", opf, compress_type=ZIP_DEFLATED)
-        archive.writestr("OEBPS/chapter.xhtml", b"<html/>", compress_type=ZIP_DEFLATED)
+        archive.writestr(
+            "OEBPS/chapter.xhtml",
+            b"<html><body><p>Chapter</p></body></html>",
+            compress_type=ZIP_DEFLATED,
+        )
     return output.getvalue()
 
 
@@ -113,7 +126,10 @@ class EpubMetadataTests(unittest.TestCase):
             with ZipFile(path) as archive:
                 self.assertEqual(archive.infolist()[0].filename, "mimetype")
                 self.assertEqual(archive.infolist()[0].compress_type, ZIP_STORED)
-                self.assertEqual(archive.read("OEBPS/chapter.xhtml"), b"<html/>")
+                self.assertEqual(
+                    archive.read("OEBPS/chapter.xhtml"),
+                    b"<html><body><p>Chapter</p></body></html>",
+                )
 
     def test_preserves_existing_series_when_source_has_none(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -182,6 +198,60 @@ class EpubOutputTests(unittest.IsolatedAsyncioTestCase):
 
                 method.assert_awaited_once()
                 normalize.assert_called_once_with("book.epub", metadata)
+
+    async def test_epub_in_parts_registers_nextory_cover(self):
+        partial_epub = create_epub("<dc:title>Original</dc:title>")
+        webp_cover = BytesIO()
+        Image.new("RGB", (2, 2), "red").save(webp_cover, format="WEBP")
+        data = EpubInParts(
+            files=[OnlineFile(url="https://example.invalid/part.epub", extension="epub")],
+            files_in_toc={},
+            cover=OnlineFile(url="https://example.invalid/cover.jpg", extension="jpg"),
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "book.epub"
+            output = Epub()
+
+            async def write_partial(_file, location, _update=None):
+                Path(location).write_bytes(partial_epub)
+
+            output._download_and_write_file = AsyncMock(side_effect=write_partial)
+            output._download_file = AsyncMock(return_value=webp_cover.getvalue())
+            try:
+                await output.download(
+                    Book(metadata=Metadata(title="Correct title"), data=data),
+                    str(path),
+                    None,
+                )
+            finally:
+                await output.close()
+
+            with ZipFile(path) as archive:
+                container = ET.fromstring(archive.read("META-INF/container.xml"))
+                rootfile = container.find(
+                    ".//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile"
+                )
+                opf_path = rootfile.get("full-path")
+                opf = ET.fromstring(archive.read(opf_path))
+                metadata = next(
+                    element for element in opf.iter() if element.tag.endswith("}metadata")
+                )
+                cover_meta = next(
+                    element
+                    for element in metadata
+                    if element.tag.endswith("}meta") and element.get("name") == "cover"
+                )
+                cover_id = cover_meta.get("content")
+                cover_item = next(
+                    element
+                    for element in opf.iter()
+                    if element.tag.endswith("}item") and element.get("id") == cover_id
+                )
+                cover_path = PurePosixPath(opf_path).parent / cover_item.get("href")
+                cover_bytes = archive.read(str(cover_path))
+                with Image.open(BytesIO(cover_bytes)) as cover:
+                    self.assertEqual(cover.format, "JPEG")
 
 
 class MetadataTests(unittest.TestCase):
